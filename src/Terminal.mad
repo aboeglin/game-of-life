@@ -1,0 +1,9 @@
+import IO from "IO"
+
+clear :: String
+clear = "\x1b[H\x1b[0J"
+
+clearScreen :: {} -> {}
+export clearScreen = () => {
+  IO.put(clear)
+}

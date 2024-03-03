@@ -1,31 +1,29 @@
 import type { Set } from "Set"
 
 import { EQ, GT, LT } from "Compare"
+import Dictionary from "Dictionary"
 import IO from "IO"
 import Integer from "Integer"
 import List from "List"
+import Math from "Math"
+import { Just, Nothing } from "Maybe"
 import Set from "Set"
+import Terminal from "./Terminal"
 
 
 
 alias Vec2 = { x :: Integer, y :: Integer }
 
-export alias Cell = Vec2
+export alias Cells = Dictionary Integer (Set Integer)
 
 instance Comparable { x :: Integer, y :: Integer } {
   compare = (a, b) => a.x > b.x ? GT : a.x < b.x ? LT : a.y > b.y ? GT : a.y < b.y ? LT : EQ
 }
-// instance (Comparable a,
-// Comparable b) => Comparable { x :: a, y :: b } {
-//   compare = (a, b) => {
-//     xComparison = compare(a.x, b.x)
-//     return xComparison == EQ ? compare(a.y, b.y) : xComparison
-//   }
-// }
+
 
 export alias Grid = List Vec2
 
-export type Game = Game(Grid, Set Vec2)
+export type Game = Game(Grid, Dictionary Integer (Set Integer))
 
 type SquareState = Dead | Alive
 type SquareInfo = SquareInfo(Vec2, SquareState, Integer)
@@ -38,26 +36,49 @@ getGrid = where {
 }
 
 
-getCells :: Game -> Set Vec2
+getCells :: Game -> Cells
 getCells = where {
   Game(_, cells) =>
     cells
 }
 
 
-export make = (w, h) => {
-  grid = pipe(
-    List.range(0),
-    ap(
-      pipe(
-        List.range(0),
-        map((y, x) => ({ x, y })),
-      )(h),
-    ),
-  )(w)
+makeGrid :: Integer -> Integer -> Grid
+makeGrid = (w, h) => pipe(
+  List.range(0),
+  ap(
+    pipe(
+      List.range(0),
+      map((y, x) => ({ x, y })),
+    )(h),
+  ),
+)(w)
 
-  return Game(grid, Set.empty)
-}
+
+randomCells :: Integer -> Integer -> Cells
+randomCells = (w, h) => List.reduce(
+  (rows, y) => {
+    columns = List.reduce(
+      (cols, x) => Math.random() > 0.8 ? Set.insert(x, cols) : cols,
+      Set.empty,
+      List.range(0, h),
+    )
+    return Dictionary.insert(y, columns, rows)
+  },
+  Dictionary.empty,
+  List.range(0, w),
+)
+
+
+empty :: Integer -> Integer -> Game
+export empty = (w, h) => pipe(
+  makeGrid(w),
+  Game($, Dictionary.empty),
+)(h)
+
+
+random :: Integer -> Integer -> Game
+export random = (w, h) => Game(makeGrid(w, h), randomCells(w, h))
 
 
 neighborPositionsAt :: Vec2 -> List Vec2
@@ -73,8 +94,17 @@ neighborPositionsAt = (at) => [
 ]
 
 
-isLivingAt :: Set Cell -> Vec2 -> Boolean
-isLivingAt = (cells, at) => Set.includes(at, cells)
+isLivingAt :: Cells -> Vec2 -> Boolean
+isLivingAt = (cells, at) => pipe(
+  Dictionary.get(at.x),
+  where {
+    Nothing =>
+      false
+
+    Just(rows) =>
+      Set.includes(at.y, rows)
+  },
+)(cells)
 
 
 getSquareInfoAt :: Game -> Vec2 -> SquareInfo
@@ -92,7 +122,17 @@ getSquareInfoAt = (game, at) => {
 }
 
 
-computeNextGeneration :: Game -> Set Cell
+insertCellAt :: Vec2 -> Cells -> Cells
+insertCellAt = (at, cells) => where(Dictionary.get(at.x, cells)) {
+  Just(rows) =>
+    Dictionary.insert(at.x, Set.insert(at.y, rows), cells)
+
+  Nothing =>
+    Dictionary.insert(at.x, Set.singleton(at.y), cells)
+}
+
+
+computeNextGeneration :: Game -> Cells
 computeNextGeneration = (game) => pipe(
   getGrid,
   List.reduce(
@@ -100,15 +140,16 @@ computeNextGeneration = (game) => pipe(
       getSquareInfoAt(game),
       where {
         SquareInfo(at, Dead, x) =>
-          x == 3 ? Set.insert(at, acc) : acc
+          x == 3 ? insertCellAt(at, acc) : acc
 
         SquareInfo(at, Alive, x) =>
-          x == 2 || x == 3 ? Set.insert(at, acc) : acc
+          x == 2 || x == 3 ? insertCellAt(at, acc) : acc
       },
     )(square),
-    Set.empty,
+    Dictionary.empty,
   ),
 )(game)
+
 
 tick :: Game -> Game
 export tick = (game) => {
@@ -118,11 +159,10 @@ export tick = (game) => {
 }
 
 
-
 // ---- Render --------------------------------------------
 
-
 moveCursor = (x, y) => `\x1b[${show(y)};${show(x)}H`
+
 
 printAt :: String -> Integer -> Integer -> {}
 printAt = (s, x, y) => IO.put(`${moveCursor(x, y)}${s}`)
@@ -132,23 +172,27 @@ FULL_SQUARE = "█"
 UPPER_SQUARE = "▀"
 LOWER_SQUARE = "▄"
 
+
+renderSquare :: Integer -> Integer -> Game -> {}
+renderSquare = (x, y, game) => {
+  targetY = Integer.fromFloat(y / 2)
+  if (y % 2 == 0) {
+    if (isLivingAt(getCells(game), { x, y: y + 1 })) {
+      printAt(FULL_SQUARE, x + 1, targetY + 1)
+    } else {
+      printAt(UPPER_SQUARE, x + 1, targetY + 1)
+    }
+  } else if (!isLivingAt(getCells(game), { x, y: y - 1 })) {
+    printAt(LOWER_SQUARE, x + 1, targetY + 1)
+  }
+}
+
+
 render :: Game -> {}
 export render = (game) => {
+  Terminal.clearScreen()
   pipe(
     getCells,
-    map(
-      (position) => {
-        targetY = Integer.fromFloat(position.y / 2)
-        if (position.y % 2 == 0) {
-          if (isLivingAt(getCells(game), { x: position.x, y: position.y + 1 })) {
-            printAt(FULL_SQUARE, position.x + 1, targetY + 1)
-          } else {
-            printAt(UPPER_SQUARE, position.x + 1, targetY + 1)
-          }
-        } else if (!isLivingAt(getCells(game), { x: position.x, y: position.y - 1 })) {
-          printAt(LOWER_SQUARE, position.x + 1, targetY + 1)
-        }
-      },
-    ),
+    Dictionary.mapWithKey((x, cols) => { map(renderSquare(x, $, game), cols) }),
   )(game)
 }
