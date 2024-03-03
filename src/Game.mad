@@ -1,0 +1,161 @@
+import { always, equals } from "Function"
+import List from "List"
+import IO from "IO"
+import Maybe from "Maybe"
+import Integer from "Integer"
+import { Just, Nothing } from "Maybe"
+
+
+
+alias Vec2 = { x :: Integer, y :: Integer }
+
+export type Cell = Cell(Vec2)
+export alias Grid = List Vec2
+
+export type Game = Game(Grid, List Cell)
+
+type SquareState = Dead | Alive
+type SquareInfo = SquareInfo(Vec2, SquareState, Integer)
+
+getGrid :: Game -> Grid
+getGrid = where {
+  Game(grid, _) =>
+    grid
+}
+
+getCells :: Game -> List Cell
+getCells = where {
+  Game(_, cells) =>
+    cells
+}
+
+getCellPosition :: Cell -> Vec2
+getCellPosition = where {
+  Cell(position) =>
+    position
+}
+
+export make = (w, h) => {
+  grid = pipe(
+    List.range(0),
+    ap(
+      pipe(
+        List.range(0),
+        map((y, x) => ({ x, y })),
+      )(h),
+    ),
+  )(w)
+
+  return Game(grid, [])
+}
+
+
+neighborPositionsAt :: Vec2 -> List Vec2
+neighborPositionsAt = (at) => [
+  { x: at.x - 1, y: at.y - 1 },
+  { x: at.x, y: at.y - 1 },
+  { x: at.x + 1, y: at.y - 1 },
+  { x: at.x + 1, y: at.y },
+  { x: at.x + 1, y: at.y + 1 },
+  { x: at.x, y: at.y + 1 },
+  { x: at.x - 1, y: at.y + 1 },
+  { x: at.x - 1, y: at.y },
+]
+
+getCellAt :: Game -> Vec2 -> Maybe Cell
+getCellAt = (game, at) => pipe(
+  getCells,
+  List.find(
+    pipe(
+      getCellPosition,
+      equals(at),
+    ),
+  ),
+)(game)
+
+getSquareInfoAt :: Game -> Vec2 -> SquareInfo
+getSquareInfoAt = (game, at) => {
+  squareState = pipe(
+    getCellAt($, at),
+    map(always(Alive)),
+    Maybe.fromMaybe(Dead),
+  )(game)
+
+  neighborCount = pipe(
+    neighborPositionsAt,
+    List.mapMaybe(getCellAt(game)),
+    List.length,
+  )(at)
+
+  return SquareInfo(at, squareState, neighborCount)
+}
+
+computeNextGeneration :: Game -> List Cell
+computeNextGeneration = (game) => pipe(
+  getGrid,
+  List.mapMaybe(
+    pipe(
+      getSquareInfoAt(game),
+      where {
+        SquareInfo(at, Dead, 3) =>
+          Just(Cell(at))
+
+        SquareInfo(_, Dead, _) =>
+          Nothing
+
+        SquareInfo(at, Alive, x) =>
+          x == 2 || x == 3 ? Just(Cell(at)) : Nothing
+      },
+    ),
+  ),
+)(game)
+
+tick :: Game -> Game
+export tick = (game) => {
+  grid = getGrid(game)
+  nextCells = computeNextGeneration(game)
+  return Game(grid, nextCells)
+}
+
+
+
+// ---- Render --------------------------------------------
+
+
+moveCursor = (x, y) => `\x1b[${show(y)};${show(x)}H`
+
+printAt :: String -> Integer -> Integer -> {}
+printAt = (s, x, y) => IO.put(`${moveCursor(x, y)}${s}`)
+
+
+FULL_SQUARE = "█"
+UPPER_SQUARE = "▀"
+LOWER_SQUARE = "▄"
+
+render :: Game -> {}
+export render = (game) => {
+  pipe(
+    getCells,
+    map(getCellPosition),
+    List.forEach((position) => {
+      targetY = Integer.fromFloat(position.y / 2)
+      if (position.y % 2 == 0) {
+        where(getCellAt(game, { x: position.x, y: position.y + 1 })) {
+          Just(_) =>
+            printAt(FULL_SQUARE, position.x + 1, targetY + 1)
+
+          Nothing =>
+            printAt(UPPER_SQUARE, position.x + 1, targetY + 1)
+        }
+      } else {
+        where(getCellAt(game, { x: position.x, y: position.y - 1 })) {
+          Nothing =>
+            printAt(LOWER_SQUARE, position.x + 1, targetY + 1)
+
+          _ =>
+            {}
+        }
+      }
+    })
+  )(game)
+}

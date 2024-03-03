@@ -1,0 +1,129 @@
+import type { Cell, Game, Grid } from "./Game"
+
+import List from "List"
+import { assertEquals, test } from "Test"
+
+import { Cell, Game, make, tick } from "./Game"
+
+
+
+/**
+ * Rules
+ * 1. Any live cell with fewer than two live neighbors dies, as if by underpopulation.
+ * 2. Any live cell with two or three live neighbors lives on to the next generation.
+ * 3. Any live cell with more than three live neighbors dies, as if by overpopulation.
+ * 4. Any dead cell with exactly three live neighbors becomes a live cell, as if by reproduction.
+ */
+
+
+make3x3Game :: List Cell -> Game
+make3x3Game = (cells) => Game(
+  [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 2, y: 0 },
+    { x: 0, y: 1 },
+    { x: 1, y: 1 },
+    { x: 2, y: 1 },
+    { x: 0, y: 2 },
+    { x: 1, y: 2 },
+    { x: 2, y: 2 },
+  ],
+  cells,
+)
+
+
+getGrid :: Game -> Grid
+getGrid = where {
+  Game(g, _) =>
+    g
+}
+
+test("make - empty grid", () => assertEquals(make(0, 0), Game([], [])))
+
+test(
+  "make - 6x4 should have 24 squares",
+  () => assertEquals(
+    pipe(
+      make(6),
+      getGrid,
+      List.length,
+    )(4),
+    24,
+  ),
+)
+
+test(
+  "make - 2x3 should build a correct grid",
+  () => assertEquals(
+    pipe(
+      make(2),
+      getGrid,
+    )(3),
+    [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 1, y: 1 },
+      { x: 0, y: 2 },
+      { x: 1, y: 2 },
+    ],
+  ),
+)
+
+test(
+  "tick - a single cell will die",
+  () => assertEquals(
+    pipe(
+      make3x3Game,
+      tick,
+    )([Cell({ x: 1, y: 1 })]),
+    make3x3Game([]),
+  ),
+)
+
+test(
+  "tick - a single cell will die",
+  () => assertEquals(
+    pipe(
+      make3x3Game,
+      tick,
+    )([Cell({ x: 1, y: 1 })]),
+    make3x3Game([]),
+  ),
+)
+
+test(
+  `tick
+  [x][ ][ ]     [ ][ ][ ]
+  [ ][x][ ]  -> [x][x][ ]
+  [x][ ][ ]     [ ][ ][ ]
+  `,
+  () => assertEquals(
+    pipe(
+      make3x3Game,
+      tick,
+    )([Cell({ x: 0, y: 0 }), Cell({ x: 1, y: 1 }), Cell({ x: 0, y: 2 })]),
+    make3x3Game([Cell({ x: 0, y: 1 }), Cell({ x: 1, y: 1 })]),
+  ),
+)
+
+test(
+  `tick
+  [x][ ][ ]     [x][x][ ]
+  [x][x][ ]  -> [x][x][ ]
+  [ ][ ][ ]     [ ][ ][ ]
+  `,
+  () => assertEquals(
+    pipe(
+      make3x3Game,
+      tick,
+    )([Cell({ x: 0, y: 0 }), Cell({ x: 0, y: 1 }), Cell({ x: 1, y: 1 })]),
+    make3x3Game([
+      Cell({ x: 0, y: 0 }),
+      Cell({ x: 1, y: 0 }),
+      Cell({ x: 0, y: 1 }),
+      Cell({ x: 1, y: 1 }),
+    ]),
+  ),
+)

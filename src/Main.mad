@@ -1,0 +1,68 @@
+import IO from "IO"
+import List from "List"
+import Math from "Math"
+import { Just, Nothing } from "Maybe"
+import Process from "Process"
+import Stream from "Stream"
+import Terminal from "Terminal"
+import Tuple from "Tuple"
+
+import { Cell, Game, make, render, tick } from "./Game"
+
+
+
+alternateOn = "\x1b[?1049h"
+alternateOff = "\x1b[?1049l"
+
+saveScreen = "\x1b[?47h"
+restoreScreen = "\x1b[?47l"
+
+smkx = "\x1b[?1h"
+smkxOff = "\x1b[?1l"
+
+clear :: String
+clear = "\x1b[H\x1b[0J"
+
+clearScreen = () => {
+  IO.put(clear)
+}
+
+fullscreen = () => {
+  IO.put(saveScreen)
+  IO.put(alternateOn)
+  IO.put(smkx)
+}
+
+exitFullscreen = () => {
+  IO.put(smkxOff)
+  IO.put(alternateOff)
+  IO.put(restoreScreen)
+}
+
+
+main = () => {
+  Process.onExit(() => { exitFullscreen() })
+
+  windowSize = Terminal.getWindowSize()
+  w = Tuple.fst(windowSize)
+  h = Tuple.snd(windowSize) * 2
+
+  game = make(w, h)
+
+  game = where(game) {
+    Game(grid, _) =>
+      Game(
+        grid,
+        List.mapMaybe((square) => Math.random() > 0.9 ? Just(Cell(square)) : Nothing, grid),
+      )
+  }
+
+  Stream.forEach(
+    () => {
+      clearScreen()
+      render(game)
+      game = tick(game)
+    },
+    Stream.interval(100),
+  )
+}
