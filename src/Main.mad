@@ -1,23 +1,23 @@
 import IO from "IO"
 import List from "List"
 import Math from "Math"
-import { Just, Nothing } from "Maybe"
 import Process from "Process"
+import Set from "Set"
 import Stream from "Stream"
 import Terminal from "Terminal"
 import Tuple from "Tuple"
 
-import { Cell, Game, make, render, tick } from "./Game"
+import { Game, make, render, tick } from "./Game"
 
 
 
-alternateOn = "\x1b[?1049h"
+// alternateOn = "\x1b[?1049h"
 alternateOff = "\x1b[?1049l"
 
-saveScreen = "\x1b[?47h"
+// saveScreen = "\x1b[?47h"
 restoreScreen = "\x1b[?47l"
 
-smkx = "\x1b[?1h"
+// smkx = "\x1b[?1h"
 smkxOff = "\x1b[?1l"
 
 clear :: String
@@ -27,11 +27,11 @@ clearScreen = () => {
   IO.put(clear)
 }
 
-fullscreen = () => {
-  IO.put(saveScreen)
-  IO.put(alternateOn)
-  IO.put(smkx)
-}
+// fullscreen = () => {
+//   IO.put(saveScreen)
+//   IO.put(alternateOn)
+//   IO.put(smkx)
+// }
 
 exitFullscreen = () => {
   IO.put(smkxOff)
@@ -53,7 +53,11 @@ main = () => {
     Game(grid, _) =>
       Game(
         grid,
-        List.mapMaybe((square) => Math.random() > 0.9 ? Just(Cell(square)) : Nothing, grid),
+        List.reduce(
+          (acc, square) => Math.random() > 0.85 ? Set.insert(square, acc) : acc,
+          Set.empty,
+          grid,
+        ),
       )
   }
 
@@ -63,6 +67,6 @@ main = () => {
       render(game)
       game = tick(game)
     },
-    Stream.interval(100),
+    Stream.interval(20),
   )
 }
